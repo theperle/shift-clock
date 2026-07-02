@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>シフト時計</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --card: #1a1f35;
+    --card2: #232948;
+    --text: #eef0ff;
+    --sub: #9aa3c7;
+    --accent: #7c9dff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .clock-card {
+    background: linear-gradient(135deg, #1c2340, #141833);
+    border-radius: 20px;
+    padding: 24px 20px;
+    text-align: center;
+    margin-bottom: 14px;
+    border: 1px solid #2a3158;
+  }
+  .date-line { color: var(--sub); font-size: 15px; margin-bottom: 4px; }
+  .clock {
+    font-size: 56px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+  }
+  .clock .sec { font-size: 28px; color: var(--sub); }
+  .today-shift {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.05);
+  }
+  .shift-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .shift-time { font-size: 15px; color: var(--sub); }
+  .countdown { margin-top: 8px; font-size: 16px; font-weight: 600; color: var(--accent); }
+  .tomorrow { margin-top: 10px; font-size: 13px; color: var(--sub); }
+
+  .cal-card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 16px;
+    border: 1px solid #2a3158;
+  }
+  .cal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .cal-header h2 { font-size: 18px; }
+  .nav-btn {
+    background: var(--card2); color: var(--text);
+    border: none; border-radius: 10px;
+    width: 40px; height: 40px; font-size: 18px; cursor: pointer;
+  }
+  .weekdays, .days {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  }
+  .weekdays div { text-align: center; font-size: 12px; color: var(--sub); padding: 4px 0; }
+  .weekdays div:first-child { color: #ff8a8a; }
+  .weekdays div:last-child { color: #8ab8ff; }
+  .day {
+    aspect-ratio: 1 / 1.15;
+    border-radius: 10px;
+    background: var(--card2);
+    border: none;
+    color: var(--text);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; cursor: pointer; font-size: 14px;
+    padding: 2px;
+  }
+  .day.empty { background: transparent; cursor: default; }
+  .day.today { outline: 2px solid var(--accent); }
+  .day .num { font-weight: 600; }
+  .day .tag {
+    font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 6px;
+    max-width: 100%; overflow: hidden; white-space: nowrap;
+  }
+  .hint { text-align: center; color: var(--sub); font-size: 12px; margin-top: 10px; }
+
+  .import-row { margin-top: 12px; }
+  .import-btn {
+    width: 100%; padding: 12px; border-radius: 12px; border: 1px dashed #3a4270;
+    background: transparent; color: var(--accent); font-size: 14px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* ボトムシート共通 */
+  .sheet-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: flex-end; justify-content: center;
+    z-index: 10;
+  }
+  .sheet-bg.open { display: flex; }
+  .sheet {
+    background: var(--card); width: 100%; max-width: 520px;
+    border-radius: 20px 20px 0 0; padding: 20px 16px 32px;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .sheet h3 { margin-bottom: 14px; font-size: 16px; }
+  .shift-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .shift-opt {
+    border: none; border-radius: 12px; padding: 14px 4px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    color: #10132a;
+  }
+  .shift-opt.clear { background: var(--card2); color: var(--sub); }
+  .shift-opt small { display: block; font-weight: 400; font-size: 11px; margin-top: 2px; opacity: 0.75; }
+
+  /* インポートモーダル */
+  .import-desc { font-size: 13px; color: var(--sub); margin-bottom: 10px; line-height: 1.6; }
+  .import-textarea {
+    width: 100%; min-height: 140px; border-radius: 12px; border: 1px solid #2a3158;
+    background: var(--card2); color: var(--text); padding: 10px; font-size: 13px;
+    resize: vertical; margin-bottom: 12px;
+  }
+  .row-btns { display: flex; gap: 8px; margin-top: 4px; }
+  .row-btns button {
+    flex: 1; padding: 12px; border-radius: 12px; border: none;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #0c1024; }
+  .btn-secondary { background: var(--card2); color: var(--text); }
+
+  .field-row { margin-bottom: 14px; }
+  .field-row label { display: block; font-size: 13px; color: var(--sub); margin-bottom: 6px; }
+  .field-row select {
+    width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #2a3158;
+    background: var(--card2); color: var(--text); font-size: 14px;
+  }
+  .preview-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; overflow-x: auto; display: block; }
+  .preview-table td { border: 1px solid #2a3158; padding: 4px 6px; white-space: nowrap; }
+  .preview-table td.picked { background: rgba(124,157,255,0.18); }
+
+  .label-map-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 8px 0; border-bottom: 1px solid #262c4d;
+  }
+  .label-map-row .raw-label { font-size: 13px; word-break: break-all; }
+  .label-map-row select {
+    padding: 8px; border-radius: 8px; border: 1px solid #2a3158;
+    background: var(--card2); color: var(--text); font-size: 13px; flex-shrink: 0;
+  }
+  .import-result { text-align: center; padding: 20px 0; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<div class="clock-card">
+  <div class="date-line" id="dateLine"></div>
+  <div class="clock" id="clock"></div>
+  <div class="today-shift" id="todayShift"></div>
+  <div class="tomorrow" id="tomorrowLine"></div>
+</div>
+
+<div class="cal-card">
+  <div class="cal-header">
+    <button class="nav-btn" id="prevBtn">‹</button>
+    <h2 id="calTitle"></h2>
+    <button class="nav-btn" id="nextBtn">›</button>
+  </div>
+  <div class="weekdays">
+    <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+  </div>
+  <div class="days" id="days"></div>
+  <div class="hint">日付をタップしてシフトを登録（自動保存されます）</div>
+  <div class="import-row">
+    <button class="import-btn" id="importOpenBtn">📋 スプレッドシートから取り込む</button>
+  </div>
+</div>
+
+<!-- シフト選択シート -->
+<div class="sheet-bg" id="sheetBg">
+  <div class="sheet">
+    <h3 id="sheetTitle"></h3>
+    <div class="shift-options" id="shiftOptions"></div>
+  </div>
+</div>
+
+<!-- インポートシート -->
+<div class="sheet-bg" id="importBg">
+  <div class="sheet" id="importSheet"></div>
+</div>
+
+<script>
+// シフトの種類（名前・時間・休憩・色）— ここを編集すれば自由に変えられます
+const SHIFT_TYPES = [
+  { id: "day",   name: "日勤",  start: "09:30", end: "19:30", breakMin: 60, color: "#8be08b" },
+  { id: "short", name: "半日",  start: "09:30", end: "15:30", breakMin: 0,  color: "#ffd166" },
+  { id: "off",   name: "休み",  start: "",      end: "",      breakMin: 0,  color: "#9aa3c7" },
+];
+
+const WEEK = ["日","月","火","水","木","金","土"];
+let shifts = JSON.parse(localStorage.getItem("shifts") || "{}");
+let viewYear, viewMonth; // 表示中の年月
+let selectedKey = null;
+
+function keyOf(y, m, d) {
+  return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+function typeOf(id) { return SHIFT_TYPES.find(t => t.id === id); }
+function save() { localStorage.setItem("shifts", JSON.stringify(shifts)); }
+function fmtBreak(min) {
+  if (!min) return "";
+  return min % 60 === 0 ? `休憩${min / 60}時間` : `休憩${min}分`;
+}
+
+// ---- 時計と今日のシフト表示 ----
+function tick() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  document.getElementById("dateLine").textContent =
+    `${y}年${m + 1}月${d}日（${WEEK[now.getDay()]}）`;
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  document.getElementById("clock").innerHTML =
+    `${hh}:${mm}<span class="sec">:${ss}</span>`;
+
+  renderToday(now);
+}
+
+function renderToday(now) {
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  const el = document.getElementById("todayShift");
+  const t = typeOf(shifts[keyOf(y, m, d)]);
+
+  if (!t) {
+    el.innerHTML = `<div style="color:var(--sub)">今日のシフトは未登録です</div>`;
+  } else if (t.id === "off") {
+    el.innerHTML = `<span class="shift-badge" style="background:${t.color};color:#10132a">休み</span>
+      <div class="shift-time">ゆっくり休んでください 😊</div>`;
+  } else {
+    let countdown = "";
+    const start = toDate(now, t.start);
+    let end = toDate(now, t.end);
+    if (end <= start) end.setDate(end.getDate() + 1); // 夜勤など日をまたぐ場合
+
+    if (now < start) {
+      countdown = `出勤まで あと${fmtDiff(start - now)}`;
+    } else if (now < end) {
+      countdown = `勤務中 ・ 終業まで あと${fmtDiff(end - now)}`;
+    } else {
+      countdown = "本日の勤務は終了しました。お疲れさまでした！";
+    }
+    const breakLabel = fmtBreak(t.breakMin);
+    el.innerHTML = `<span class="shift-badge" style="background:${t.color};color:#10132a">${t.name}</span>
+      <div class="shift-time">${t.start} 〜 ${t.end}${breakLabel ? `（${breakLabel}）` : ""}</div>
+      <div class="countdown">${countdown}</div>`;
+  }
+
+  // 明日の予定
+  const tm = new Date(y, m, d + 1);
+  const tt = typeOf(shifts[keyOf(tm.getFullYear(), tm.getMonth(), tm.getDate())]);
+  document.getElementById("tomorrowLine").textContent =
+    tt ? `明日：${tt.name}${tt.start ? `（${tt.start}〜${tt.end}）` : ""}` : "明日：未登録";
+}
+
+function toDate(base, hhmm) {
+  const [h, mi] = hhmm.split(":").map(Number);
+  const dt = new Date(base);
+  dt.setHours(h, mi, 0, 0);
+  return dt;
+}
+function fmtDiff(ms) {
+  const totalMin = Math.ceil(ms / 60000);
+  const h = Math.floor(totalMin / 60), mi = totalMin % 60;
+  return h > 0 ? `${h}時間${mi}分` : `${mi}分`;
+}
+
+// ---- カレンダー ----
+function renderCalendar() {
+  document.getElementById("calTitle").textContent = `${viewYear}年 ${viewMonth + 1}月`;
+  const days = document.getElementById("days");
+  days.innerHTML = "";
+
+  const first = new Date(viewYear, viewMonth, 1).getDay();
+  const count = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const now = new Date();
+
+  for (let i = 0; i < first; i++) {
+    const e = document.createElement("div");
+    e.className = "day empty";
+    days.appendChild(e);
+  }
+  for (let d = 1; d <= count; d++) {
+    const btn = document.createElement("button");
+    btn.className = "day";
+    if (viewYear === now.getFullYear() && viewMonth === now.getMonth() && d === now.getDate())
+      btn.classList.add("today");
+    const t = typeOf(shifts[keyOf(viewYear, viewMonth, d)]);
+    btn.innerHTML = `<span class="num">${d}</span>` +
+      (t ? `<span class="tag" style="background:${t.color};color:#10132a">${t.name}</span>` : "");
+    btn.onclick = () => openSheet(d);
+    days.appendChild(btn);
+  }
+}
+
+function openSheet(d) {
+  selectedKey = keyOf(viewYear, viewMonth, d);
+  document.getElementById("sheetTitle").textContent =
+    `${viewMonth + 1}月${d}日のシフトを選択`;
+  const box = document.getElementById("shiftOptions");
+  box.innerHTML = "";
+  SHIFT_TYPES.forEach(t => {
+    const b = document.createElement("button");
+    b.className = "shift-opt";
+    b.style.background = t.color;
+    const sub = t.start ? `${t.start}〜${t.end}${t.breakMin ? `（${fmtBreak(t.breakMin)}）` : ""}` : "";
+    b.innerHTML = t.name + (sub ? `<small>${sub}</small>` : "");
+    b.onclick = () => { shifts[selectedKey] = t.id; save(); closeSheet(); };
+    box.appendChild(b);
+  });
+  const clear = document.createElement("button");
+  clear.className = "shift-opt clear";
+  clear.textContent = "登録を消す";
+  clear.onclick = () => { delete shifts[selectedKey]; save(); closeSheet(); };
+  box.appendChild(clear);
+  document.getElementById("sheetBg").classList.add("open");
+}
+function closeSheet() {
+  document.getElementById("sheetBg").classList.remove("open");
+  renderCalendar();
+  tick();
+}
+document.getElementById("sheetBg").addEventListener("click", e => {
+  if (e.target.id === "sheetBg") closeSheet();
+});
+
+document.getElementById("prevBtn").onclick = () => {
+  viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  renderCalendar();
+};
+document.getElementById("nextBtn").onclick = () => {
+  viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderCalendar();
+};
+
+// ================= Googleスプレッドシート取り込み =================
+// ワークフロー：Googleスプレッドシートで「日付」と「シフト」の列を選択してコピー(Ctrl/Cmd+C)し、
+// ここに貼り付ける(Cmd+V)と、タブ区切りテキストとして自動解析されます。
+let importRows = [];      // 貼り付けデータを行×列の配列にしたもの
+let importDateCol = 0;
+let importShiftCol = 1;
+let importYear = new Date().getFullYear();
+
+function openImport() {
+  importRows = [];
+  renderImportStage1();
+  document.getElementById("importBg").classList.add("open");
+}
+function closeImport() {
+  document.getElementById("importBg").classList.remove("open");
+}
+document.getElementById("importOpenBtn").onclick = openImport;
+document.getElementById("importBg").addEventListener("click", e => {
+  if (e.target.id === "importBg") closeImport();
+});
+
+function renderImportStage1() {
+  const sheet = document.getElementById("importSheet");
+  sheet.innerHTML = `
+    <h3>スプレッドシートから取り込む</h3>
+    <div class="import-desc">
+      Googleスプレッドシートで「日付」と「シフト」の列（見出し行も含めてOK）を選択してコピーし（Cmd+C）、
+      下の欄に貼り付けてください（Cmd+V）。
+    </div>
+    <textarea class="import-textarea" id="importTextarea" placeholder="ここに貼り付け"></textarea>
+    <div class="row-btns">
+      <button class="btn-secondary" id="importCancel1">キャンセル</button>
+      <button class="btn-primary" id="importNext1">次へ</button>
+    </div>
+  `;
+  document.getElementById("importCancel1").onclick = closeImport;
+  document.getElementById("importNext1").onclick = () => {
+    const raw = document.getElementById("importTextarea").value;
+    if (!raw.trim()) return;
+    importRows = raw.trim().split("\n").map(line => {
+      const cells = line.includes("\t") ? line.split("\t") : line.split(",");
+      return cells.map(c => c.trim());
+    });
+    guessColumns();
+    renderImportStage2();
+  };
+}
+
+function tryParseDate(str, fallbackYear) {
+  if (!str) return null;
+  str = str.trim();
+  let m = str.match(/^(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})/);
+  if (m) return { y: +m[1], mo: +m[2] - 1, d: +m[3] };
+  m = str.match(/^(\d{1,2})[\/\-月.](\d{1,2})\D*$/);
+  if (m) return { y: fallbackYear, mo: +m[1] - 1, d: +m[2] };
+  return null;
+}
+
+function guessColumns() {
+  const colCount = Math.max(...importRows.map(r => r.length));
+  let bestDateCol = 0, bestScore = -1;
+  for (let c = 0; c < colCount; c++) {
+    let score = 0;
+    importRows.forEach(r => { if (tryParseDate(r[c], importYear)) score++; });
+    if (score > bestScore) { bestScore = score; bestDateCol = c; }
+  }
+  importDateCol = bestDateCol;
+  importShiftCol = colCount > 1 ? (bestDateCol === 0 ? 1 : 0) : 0;
+}
+
+function colPreview(c) {
+  return importRows.slice(0, 3).map(r => r[c] ?? "").filter(v => v).join(" / ") || "(空)";
+}
+
+function renderImportStage2() {
+  const sheet = document.getElementById("importSheet");
+  const colCount = Math.max(...importRows.map(r => r.length));
+  let colOptions = "";
+  for (let c = 0; c < colCount; c++) {
+    colOptions += `<option value="${c}">列${c + 1}：${colPreview(c)}</option>`;
+  }
+  const yearOptions = [importYear - 1, importYear, importYear + 1]
+    .map(y => `<option value="${y}" ${y === importYear ? "selected" : ""}>${y}年</option>`).join("");
+
+  let previewRows = importRows.slice(0, 6).map(r => {
+    let tds = "";
+    for (let c = 0; c < colCount; c++) {
+      tds += `<td class="${c === importDateCol || c === importShiftCol ? "picked" : ""}">${r[c] ?? ""}</td>`;
+    }
+    return `<tr>${tds}</tr>`;
+  }).join("");
+
+  sheet.innerHTML = `
+    <h3>列を選んでください</h3>
+    <div class="field-row">
+      <label>日付が入っている列</label>
+      <select id="dateColSelect">${colOptions}</select>
+    </div>
+    <div class="field-row">
+      <label>シフト名が入っている列</label>
+      <select id="shiftColSelect">${colOptions}</select>
+    </div>
+    <div class="field-row">
+      <label>年（日付に年が含まれない場合に使用）</label>
+      <select id="yearSelect">${yearOptions}</select>
+    </div>
+    <table class="preview-table"><tbody>${previewRows}</tbody></table>
+    <div class="row-btns">
+      <button class="btn-secondary" id="importBack2">戻る</button>
+      <button class="btn-primary" id="importNext2">次へ</button>
+    </div>
+  `;
+  document.getElementById("dateColSelect").value = importDateCol;
+  document.getElementById("shiftColSelect").value = importShiftCol;
+  document.getElementById("dateColSelect").onchange = e => { importDateCol = +e.target.value; renderImportStage2(); };
+  document.getElementById("shiftColSelect").onchange = e => { importShiftCol = +e.target.value; renderImportStage2(); };
+  document.getElementById("yearSelect").onchange = e => { importYear = +e.target.value; renderImportStage2(); };
+  document.getElementById("importBack2").onclick = renderImportStage1;
+  document.getElementById("importNext2").onclick = renderImportStage3;
+}
+
+let importLabelMap = {};
+function renderImportStage3() {
+  const labels = [...new Set(importRows.map(r => (r[importShiftCol] ?? "").trim()).filter(Boolean))];
+  const sheet = document.getElementById("importSheet");
+  const typeOptions = SHIFT_TYPES.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
+
+  let rowsHtml = labels.map((label, i) => `
+    <div class="label-map-row">
+      <div class="raw-label">${label}</div>
+      <select data-label-index="${i}">
+        <option value="__skip">取り込まない</option>
+        ${typeOptions}
+      </select>
+    </div>
+  `).join("");
+
+  sheet.innerHTML = `
+    <h3>シフト名の対応づけ</h3>
+    <div class="import-desc">シートに出てきた表記を、アプリのシフト種類に対応づけてください。</div>
+    ${rowsHtml || '<div class="import-desc">シフト名が見つかりませんでした。</div>'}
+    <div class="row-btns" style="margin-top:14px">
+      <button class="btn-secondary" id="importBack3">戻る</button>
+      <button class="btn-primary" id="importNext3">取り込む</button>
+    </div>
+  `;
+  // 既存の候補と一致するものは自動選択
+  labels.forEach((label, i) => {
+    const sel = sheet.querySelector(`select[data-label-index="${i}"]`);
+    const guess = SHIFT_TYPES.find(t => t.start &&
+      (label.includes(t.name) || label.includes(t.start) || label.includes(t.start.replace(/^0/, ""))));
+    if (guess) sel.value = guess.id;
+    else if (/休|off|お休み/i.test(label)) sel.value = "off";
+    else sel.value = "__skip";
+  });
+
+  document.getElementById("importBack3").onclick = renderImportStage2;
+  document.getElementById("importNext3").onclick = () => {
+    labels.forEach((label, i) => {
+      const sel = sheet.querySelector(`select[data-label-index="${i}"]`);
+      importLabelMap[label] = sel.value;
+    });
+    applyImport(labels.length);
+  };
+}
+
+function applyImport() {
+  let count = 0;
+  importRows.forEach(r => {
+    const dateStr = r[importDateCol];
+    const labelStr = (r[importShiftCol] ?? "").trim();
+    if (!labelStr) return;
+    const mapped = importLabelMap[labelStr];
+    if (!mapped || mapped === "__skip") return;
+    const parsed = tryParseDate(dateStr, importYear);
+    if (!parsed) return;
+    shifts[keyOf(parsed.y, parsed.mo, parsed.d)] = mapped;
+    count++;
+  });
+  save();
+  renderCalendar();
+  tick();
+
+  const sheet = document.getElementById("importSheet");
+  sheet.innerHTML = `
+    <h3>取り込み完了</h3>
+    <div class="import-result">✅ ${count}件のシフトを取り込みました</div>
+    <div class="row-btns">
+      <button class="btn-primary" id="importClose">閉じる</button>
+    </div>
+  `;
+  document.getElementById("importClose").onclick = closeImport;
+}
+
+// 初期化
+const now0 = new Date();
+viewYear = now0.getFullYear();
+viewMonth = now0.getMonth();
+renderCalendar();
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
