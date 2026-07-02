@@ -196,6 +196,7 @@
   <div class="sheet">
     <h3 id="sheetTitle"></h3>
     <div class="shift-options" id="shiftOptions"></div>
+    <div id="customTimeBox" style="margin-top:16px;padding-top:16px;border-top:1px solid #262c4d"></div>
   </div>
 </div>
 
@@ -221,6 +222,12 @@ function keyOf(y, m, d) {
   return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
 }
 function typeOf(id) { return SHIFT_TYPES.find(t => t.id === id); }
+// shifts[key] はプリセットのid文字列、または {start,end,breakMin,...} のカスタム時間オブジェクト
+function resolveShift(val) {
+  if (!val) return null;
+  if (typeof val === "string") return typeOf(val);
+  return { id: "custom", name: "カスタム", color: "#6c7bff", breakMin: 0, ...val };
+}
 function save() { localStorage.setItem("shifts", JSON.stringify(shifts)); }
 function fmtBreak(min) {
   if (!min) return "";
@@ -245,7 +252,7 @@ function tick() {
 function renderToday(now) {
   const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   const el = document.getElementById("todayShift");
-  const t = typeOf(shifts[keyOf(y, m, d)]);
+  const t = resolveShift(shifts[keyOf(y, m, d)]);
 
   if (!t) {
     el.innerHTML = `<div style="color:var(--sub)">今日のシフトは未登録です</div>`;
@@ -273,7 +280,7 @@ function renderToday(now) {
 
   // 明日の予定
   const tm = new Date(y, m, d + 1);
-  const tt = typeOf(shifts[keyOf(tm.getFullYear(), tm.getMonth(), tm.getDate())]);
+  const tt = resolveShift(shifts[keyOf(tm.getFullYear(), tm.getMonth(), tm.getDate())]);
   document.getElementById("tomorrowLine").textContent =
     tt ? `明日：${tt.name}${tt.start ? `（${tt.start}〜${tt.end}）` : ""}` : "明日：未登録";
 }
@@ -310,7 +317,7 @@ function renderCalendar() {
     btn.className = "day";
     if (viewYear === now.getFullYear() && viewMonth === now.getMonth() && d === now.getDate())
       btn.classList.add("today");
-    const t = typeOf(shifts[keyOf(viewYear, viewMonth, d)]);
+    const t = resolveShift(shifts[keyOf(viewYear, viewMonth, d)]);
     btn.innerHTML = `<span class="num">${d}</span>` +
       (t ? `<span class="tag" style="background:${t.color};color:#10132a">${t.name}</span>` : "");
     btn.onclick = () => openSheet(d);
@@ -338,6 +345,44 @@ function openSheet(d) {
   clear.textContent = "登録を消す";
   clear.onclick = () => { delete shifts[selectedKey]; save(); closeSheet(); };
   box.appendChild(clear);
+
+  // カスタム時間入力（既存のカスタム登録があれば値を復元）
+  const existing = shifts[selectedKey];
+  const existingCustom = existing && typeof existing === "object" ? existing : null;
+  const custom = document.getElementById("customTimeBox");
+  custom.innerHTML = `
+    <div class="field-row" style="margin-bottom:8px">
+      <label>自分で時間を入力する</label>
+    </div>
+    <div class="row-btns" style="margin-bottom:8px">
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--sub)">開始</label>
+        <input type="time" id="customStart" value="${existingCustom ? existingCustom.start : "09:00"}"
+          style="width:100%;padding:10px;border-radius:10px;border:1px solid #2a3158;background:var(--card2);color:var(--text);font-size:14px">
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--sub)">終了</label>
+        <input type="time" id="customEnd" value="${existingCustom ? existingCustom.end : "18:00"}"
+          style="width:100%;padding:10px;border-radius:10px;border:1px solid #2a3158;background:var(--card2);color:var(--text);font-size:14px">
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--sub)">休憩(分)</label>
+        <input type="number" id="customBreak" min="0" step="10" value="${existingCustom ? existingCustom.breakMin : 60}"
+          style="width:100%;padding:10px;border-radius:10px;border:1px solid #2a3158;background:var(--card2);color:var(--text);font-size:14px">
+      </div>
+    </div>
+    <button class="shift-opt" id="customSaveBtn" style="width:100%;background:#6c7bff;color:#fff">この時間で登録</button>
+  `;
+  document.getElementById("customSaveBtn").onclick = () => {
+    const start = document.getElementById("customStart").value;
+    const end = document.getElementById("customEnd").value;
+    const breakMin = +document.getElementById("customBreak").value || 0;
+    if (!start || !end) return;
+    shifts[selectedKey] = { start, end, breakMin };
+    save();
+    closeSheet();
+  };
+
   document.getElementById("sheetBg").classList.add("open");
 }
 function closeSheet() {
