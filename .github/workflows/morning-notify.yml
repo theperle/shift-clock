@@ -1,0 +1,21 @@
+name: Morning LINE Notification
+
+on:
+  schedule:
+    # 21:30 UTC = 6:30 JST（毎朝）
+    - cron: '30 21 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Send LINE notification
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: node scripts/morning-notify.js
