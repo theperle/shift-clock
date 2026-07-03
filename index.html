@@ -32,26 +32,31 @@
   }
   .clock-card {
     background: linear-gradient(135deg, #1c2340, #141833);
-    border-radius: 20px;
-    padding: 24px 20px;
+    border-radius: 16px;
+    padding: 12px 16px;
+    text-align: center;
+    margin-bottom: 14px;
+    border: 1px solid #2a3158;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    flex-wrap: wrap;
+  }
+  .date-line { color: var(--sub); font-size: 13px; }
+  .clock {
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+  }
+  .clock .sec { font-size: 13px; color: var(--sub); }
+  .today-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px;
     text-align: center;
     margin-bottom: 14px;
     border: 1px solid #2a3158;
   }
-  .date-line { color: var(--sub); font-size: 15px; margin-bottom: 4px; }
-  .clock {
-    font-size: 56px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 2px;
-  }
-  .clock .sec { font-size: 28px; color: var(--sub); }
-  .today-shift {
-    margin-top: 14px;
-    padding: 14px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.05);
-  }
+  .today-shift {}
   .shift-badge {
     display: inline-block;
     padding: 4px 14px;
@@ -63,6 +68,7 @@
   .shift-time { font-size: 15px; color: var(--sub); }
   .countdown { margin-top: 8px; font-size: 16px; font-weight: 600; color: var(--accent); }
   .tomorrow { margin-top: 10px; font-size: 13px; color: var(--sub); }
+  .day-note { margin-top: 6px; font-size: 13px; color: #ffd166; }
 
   .cal-card {
     background: var(--card);
@@ -80,16 +86,6 @@
     border: none; border-radius: 10px;
     width: 40px; height: 40px; font-size: 18px; cursor: pointer;
   }
-  .display-toggle {
-    display: flex; gap: 6px; margin-bottom: 12px;
-    background: var(--card2); border-radius: 10px; padding: 4px;
-  }
-  .toggle-opt {
-    flex: 1; border: none; background: transparent; color: var(--sub);
-    font-size: 12px; font-weight: 700; padding: 8px 4px; border-radius: 8px;
-    cursor: pointer;
-  }
-  .toggle-opt.active { background: var(--accent); color: #0c1024; }
   .weekdays, .days {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
   }
@@ -97,6 +93,8 @@
   .weekdays div:first-child { color: #ff8a8a; }
   .weekdays div:last-child { color: #8ab8ff; }
   .day {
+    position: relative;
+    min-width: 0;
     aspect-ratio: 1 / 1.15;
     border-radius: 10px;
     background: var(--card2);
@@ -110,9 +108,16 @@
   .day.today { outline: 2px solid var(--accent); }
   .day .num { font-weight: 600; }
   .day .tag {
-    font-size: 10px; font-weight: 700;
-    padding: 1px 5px; border-radius: 6px;
-    max-width: 100%; overflow: hidden; white-space: nowrap;
+    font-size: 9px; font-weight: 700; line-height: 1.25;
+    padding: 2px 3px; border-radius: 6px;
+    max-width: 100%;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .day .tag .t2::before { content: "\2193"; font-size: 7px; margin-right: 2px; opacity: 0.7; }
+  .day .note-dot {
+    position: absolute; top: 3px; right: 3px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #ffd166;
   }
   .hint { text-align: center; color: var(--sub); font-size: 12px; margin-top: 10px; }
 
@@ -187,6 +192,8 @@
 <div class="clock-card">
   <div class="date-line" id="dateLine"></div>
   <div class="clock" id="clock"></div>
+</div>
+<div class="today-card" id="todayCard">
   <div class="today-shift" id="todayShift"></div>
   <div class="tomorrow" id="tomorrowLine"></div>
 </div>
@@ -196,10 +203,6 @@
     <button class="nav-btn" id="prevBtn">‹</button>
     <h2 id="calTitle"></h2>
     <button class="nav-btn" id="nextBtn">›</button>
-  </div>
-  <div class="display-toggle">
-    <button class="toggle-opt" id="toggleName">シフト名</button>
-    <button class="toggle-opt" id="toggleTime">開始時刻</button>
   </div>
   <div class="weekdays">
     <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
@@ -217,6 +220,7 @@
     <h3 id="sheetTitle"></h3>
     <div class="shift-options" id="shiftOptions"></div>
     <div id="customTimeBox" style="margin-top:16px;padding-top:16px;border-top:1px solid #262c4d"></div>
+    <div id="noteBox" style="margin-top:16px;padding-top:16px;border-top:1px solid #262c4d"></div>
   </div>
 </div>
 
@@ -236,8 +240,9 @@ const SHIFT_TYPES = [
 const WEEK = ["日","月","火","水","木","金","土"];
 let shifts = JSON.parse(localStorage.getItem("shifts") || "{}");
 let viewYear, viewMonth; // 表示中の年月
-let calDisplayMode = localStorage.getItem("calDisplayMode") || "name"; // "name" | "time"
 let selectedKey = null;
+let notes = JSON.parse(localStorage.getItem("notes") || "{}");
+function saveNotes() { localStorage.setItem("notes", JSON.stringify(notes)); }
 
 function keyOf(y, m, d) {
   return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
@@ -298,12 +303,17 @@ function renderToday(now) {
       <div class="shift-time">${t.start} 〜 ${t.end}${breakLabel ? `（${breakLabel}）` : ""}</div>
       <div class="countdown">${countdown}</div>`;
   }
+  const todayNote = notes[keyOf(y, m, d)];
+  if (todayNote) el.innerHTML += `<div class="day-note">📝 ${todayNote}</div>`;
 
   // 明日の予定
   const tm = new Date(y, m, d + 1);
-  const tt = resolveShift(shifts[keyOf(tm.getFullYear(), tm.getMonth(), tm.getDate())]);
+  const tmKey = keyOf(tm.getFullYear(), tm.getMonth(), tm.getDate());
+  const tt = resolveShift(shifts[tmKey]);
+  const tmNote = notes[tmKey];
   document.getElementById("tomorrowLine").textContent =
-    tt ? `明日：${tt.name}${tt.start ? `（${tt.start}〜${tt.end}）` : ""}` : "明日：未登録";
+    (tt ? `明日：${tt.name}${tt.start ? `（${tt.start}〜${tt.end}）` : ""}` : "明日：未登録") +
+    (tmNote ? ` ／ 📝 ${tmNote}` : "");
 }
 
 function toDate(base, hhmm) {
@@ -338,27 +348,19 @@ function renderCalendar() {
     btn.className = "day";
     if (viewYear === now.getFullYear() && viewMonth === now.getMonth() && d === now.getDate())
       btn.classList.add("today");
-    const t = resolveShift(shifts[keyOf(viewYear, viewMonth, d)]);
-    let tagText = "";
-    if (t) tagText = (calDisplayMode === "time" && t.id !== "off") ? t.start : t.name;
-    btn.innerHTML = `<span class="num">${d}</span>` +
-      (t ? `<span class="tag" style="background:${t.color};color:#10132a">${tagText}</span>` : "");
+    const key = keyOf(viewYear, viewMonth, d);
+    const t = resolveShift(shifts[key]);
+    const tagHtml = t
+      ? (t.id === "off"
+          ? `<span class="tag" style="background:${t.color};color:#10132a"><span class="t1">休み</span></span>`
+          : `<span class="tag" style="background:${t.color};color:#10132a"><span class="t1">${t.start}</span><span class="t2">${t.end}</span></span>`)
+      : "";
+    btn.innerHTML = `<span class="num">${d}</span>` + tagHtml +
+      (notes[key] ? `<span class="note-dot"></span>` : "");
     btn.onclick = () => openSheet(d);
     days.appendChild(btn);
   }
 }
-
-function setCalDisplayMode(mode) {
-  calDisplayMode = mode;
-  localStorage.setItem("calDisplayMode", mode);
-  document.getElementById("toggleName").classList.toggle("active", mode === "name");
-  document.getElementById("toggleTime").classList.toggle("active", mode === "time");
-  renderCalendar();
-}
-document.getElementById("toggleName").onclick = () => setCalDisplayMode("name");
-document.getElementById("toggleTime").onclick = () => setCalDisplayMode("time");
-document.getElementById("toggleName").classList.toggle("active", calDisplayMode === "name");
-document.getElementById("toggleTime").classList.toggle("active", calDisplayMode === "time");
 
 function openSheet(d) {
   selectedKey = keyOf(viewYear, viewMonth, d);
@@ -416,6 +418,21 @@ function openSheet(d) {
     shifts[selectedKey] = { start, end, breakMin };
     save();
     closeSheet();
+  };
+
+  // 備考（自由記入メモ、シフトの有無に関わらず登録可能）
+  const noteBox = document.getElementById("noteBox");
+  noteBox.innerHTML = `
+    <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:6px">備考（一言メモ）</label>
+    <input type="text" id="noteInput" placeholder="例：飲み会あり、研修など" value="${notes[selectedKey] ? notes[selectedKey].replace(/"/g, "&quot;") : ""}"
+      style="width:100%;padding:10px;border-radius:10px;border:1px solid #2a3158;background:var(--card2);color:var(--text);font-size:14px">
+  `;
+  document.getElementById("noteInput").oninput = e => {
+    const val = e.target.value.trim();
+    if (val) notes[selectedKey] = val;
+    else delete notes[selectedKey];
+    saveNotes();
+    renderCalendar();
   };
 
   document.getElementById("sheetBg").classList.add("open");
