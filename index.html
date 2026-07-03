@@ -127,6 +127,7 @@
     background: transparent; color: var(--accent); font-size: 14px; font-weight: 700;
     cursor: pointer;
   }
+  .sync-status { text-align: center; font-size: 12px; color: var(--sub); margin-top: 6px; }
 
   /* ボトムシート共通 */
   .sheet-bg {
@@ -210,7 +211,11 @@
   <div class="days" id="days"></div>
   <div class="hint">日付をタップしてシフトを登録（自動保存されます）</div>
   <div class="import-row">
-    <button class="import-btn" id="importOpenBtn">📋 スプレッドシートから取り込む</button>
+    <button class="import-btn" id="syncBtn" style="border-style:solid;color:var(--text);background:var(--card2)">🔄 スプレッドシートから最新のシフトを取得</button>
+    <div class="sync-status" id="syncStatus"></div>
+  </div>
+  <div class="import-row">
+    <button class="import-btn" id="importOpenBtn">📋 手動で貼り付けて取り込む</button>
   </div>
 </div>
 
@@ -691,6 +696,56 @@ function applyImport() {
   document.getElementById("importClose").onclick = closeImport;
 }
 
+// ================= スプレッドシートからの自動同期 =================
+// 「ウェブに公開」したシートのCSV URL（日付, シフトの2列・見出し行なし）
+const AUTO_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkXwoSdEeG7kg3uapTKDSSX-JAULtiS6UiJ-lfuOPQvtYl6p76X2FCRhT75s9PYc_V5YtBZGnI5PPs/pub?gid=275679152&single=true&output=csv";
+
+function classifyLabel(label) {
+  label = label.trim();
+  if (!label) return null;
+  if (/休|off|お休み/i.test(label)) return "off";
+  const parsed = parseTimeRange(label);
+  if (!parsed) return null;
+  const preset = SHIFT_TYPES.find(t => t.start === parsed.start && t.end === parsed.end);
+  return preset ? preset.id : { start: parsed.start, end: parsed.end, breakMin: 0 };
+}
+
+async function syncFromSheet(manual) {
+  const statusEl = document.getElementById("syncStatus");
+  if (manual) statusEl.textContent = "取得中…";
+  try {
+    const res = await fetch(AUTO_SHEET_URL + "&t=" + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const csv = await res.text();
+    const rows = csv.trim().split("\n").map(line => line.replace(/\r$/, "").split(","));
+    const thisYear = new Date().getFullYear();
+    let count = 0;
+    rows.forEach(r => {
+      const dateStr = (r[0] ?? "").trim();
+      const labelStr = (r[1] ?? "").trim();
+      if (!dateStr || !labelStr) return;
+      const parsedDate = tryParseDate(dateStr, thisYear);
+      if (!parsedDate) return;
+      const mapped = classifyLabel(labelStr);
+      if (mapped === null) return;
+      shifts[keyOf(parsedDate.y, parsedDate.mo, parsedDate.d)] = mapped;
+      count++;
+    });
+    save();
+    renderCalendar();
+    tick();
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    statusEl.textContent = `最終更新 ${hh}:${mm}（${count}件）`;
+    localStorage.setItem("lastSync", statusEl.textContent);
+  } catch (e) {
+    statusEl.textContent = manual ? "取得に失敗しました。通信環境を確認してください" : (localStorage.getItem("lastSync") || "");
+  }
+}
+document.getElementById("syncBtn").onclick = () => syncFromSheet(true);
+document.getElementById("syncStatus").textContent = localStorage.getItem("lastSync") || "";
+
 // 初期化
 const now0 = new Date();
 viewYear = now0.getFullYear();
@@ -698,6 +753,7 @@ viewMonth = now0.getMonth();
 renderCalendar();
 tick();
 setInterval(tick, 1000);
+syncFromSheet(false); // 起動時に自動で最新のシフトを取得
 </script>
 </body>
 </html>
