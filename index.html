@@ -531,24 +531,50 @@ function renderImportStage2() {
 }
 
 let importLabelMap = {};
+let importParsedTimes = {}; // label -> {start, end} （自由な時間表記を検出した結果）
+
+function padTime(t) {
+  const [h, m] = t.split(":");
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+}
+// ラベル文字列の中から「H:MM〜H:MM」のような時間帯表記を検出する
+function parseTimeRange(label) {
+  const m = label.match(/(\d{1,2}:\d{2})\s*[-–—〜~](\d{1,2}:\d{2})/);
+  if (!m) return null;
+  return { start: padTime(m[1]), end: padTime(m[2]) };
+}
+
 function renderImportStage3() {
   const labels = [...new Set(importRows.map(r => (r[importShiftCol] ?? "").trim()).filter(Boolean))];
   const sheet = document.getElementById("importSheet");
   const typeOptions = SHIFT_TYPES.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
 
-  let rowsHtml = labels.map((label, i) => `
-    <div class="label-map-row">
-      <div class="raw-label">${label}</div>
-      <select data-label-index="${i}">
-        <option value="__skip">取り込まない</option>
-        ${typeOptions}
-      </select>
-    </div>
-  `).join("");
+  importParsedTimes = {};
+  labels.forEach(label => {
+    const parsed = parseTimeRange(label);
+    if (parsed) importParsedTimes[label] = parsed;
+  });
+
+  let rowsHtml = labels.map((label, i) => {
+    const parsed = importParsedTimes[label];
+    const customOption = parsed
+      ? `<option value="__custom">この時間のまま（${parsed.start}〜${parsed.end}）</option>`
+      : "";
+    return `
+      <div class="label-map-row">
+        <div class="raw-label">${label}</div>
+        <select data-label-index="${i}">
+          ${customOption}
+          ${typeOptions}
+          <option value="__skip">取り込まない</option>
+        </select>
+      </div>
+    `;
+  }).join("");
 
   sheet.innerHTML = `
     <h3>シフト名の対応づけ</h3>
-    <div class="import-desc">シートに出てきた表記を、アプリのシフト種類に対応づけてください。</div>
+    <div class="import-desc">シートに出てきた表記を確認してください。時間の表記（例：15:00-21:00）はそのままカスタム登録され、日勤・半日など決まったシフトに寄せる必要はありません。</div>
     ${rowsHtml || '<div class="import-desc">シフト名が見つかりませんでした。</div>'}
     <div class="row-btns" style="margin-top:14px">
       <button class="btn-secondary" id="importBack3">戻る</button>
@@ -559,15 +585,16 @@ function renderImportStage3() {
   const noZero = s => s.replace(/^0/, "");
   labels.forEach((label, i) => {
     const sel = sheet.querySelector(`select[data-label-index="${i}"]`);
-    // まず「開始〜終了」の両方が一致するものを優先（例: 9:30-19:30 と 9:30-15:30 の混同を防ぐ）
-    let guess = SHIFT_TYPES.find(t => t.start && t.end &&
-      (label.includes(t.start) || label.includes(noZero(t.start))) &&
-      (label.includes(t.end) || label.includes(noZero(t.end))));
-    // 次に名称の一致
+    const parsed = importParsedTimes[label];
+
+    // 時間表記があり、既存プリセットと完全一致するならプリセットを優先（色分け表示のため）
+    let guess = parsed
+      ? SHIFT_TYPES.find(t => t.start === parsed.start && t.end === parsed.end)
+      : null;
+    // 時間表記はあるがプリセットに一致しない → そのままカスタム登録
+    if (!guess && parsed) { sel.value = "__custom"; return; }
+    // 時間表記が無い場合は名称の一致で判定
     if (!guess) guess = SHIFT_TYPES.find(t => t.name && label.includes(t.name));
-    // 最後に開始時刻のみの一致（フォールバック）
-    if (!guess) guess = SHIFT_TYPES.find(t => t.start &&
-      (label.includes(t.start) || label.includes(noZero(t.start))));
     if (guess) sel.value = guess.id;
     else if (/休|off|お休み/i.test(label)) sel.value = "off";
     else sel.value = "__skip";
@@ -593,7 +620,14 @@ function applyImport() {
     if (!mapped || mapped === "__skip") return;
     const parsed = tryParseDate(dateStr, importYear);
     if (!parsed) return;
-    shifts[keyOf(parsed.y, parsed.mo, parsed.d)] = mapped;
+    const key = keyOf(parsed.y, parsed.mo, parsed.d);
+    if (mapped === "__custom") {
+      const t = importParsedTimes[labelStr];
+      if (!t) return;
+      shifts[key] = { start: t.start, end: t.end, breakMin: 0 };
+    } else {
+      shifts[key] = mapped;
+    }
     count++;
   });
   save();
