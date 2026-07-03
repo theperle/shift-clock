@@ -556,10 +556,18 @@ function renderImportStage3() {
     </div>
   `;
   // 既存の候補と一致するものは自動選択
+  const noZero = s => s.replace(/^0/, "");
   labels.forEach((label, i) => {
     const sel = sheet.querySelector(`select[data-label-index="${i}"]`);
-    const guess = SHIFT_TYPES.find(t => t.start &&
-      (label.includes(t.name) || label.includes(t.start) || label.includes(t.start.replace(/^0/, ""))));
+    // まず「開始〜終了」の両方が一致するものを優先（例: 9:30-19:30 と 9:30-15:30 の混同を防ぐ）
+    let guess = SHIFT_TYPES.find(t => t.start && t.end &&
+      (label.includes(t.start) || label.includes(noZero(t.start))) &&
+      (label.includes(t.end) || label.includes(noZero(t.end))));
+    // 次に名称の一致
+    if (!guess) guess = SHIFT_TYPES.find(t => t.name && label.includes(t.name));
+    // 最後に開始時刻のみの一致（フォールバック）
+    if (!guess) guess = SHIFT_TYPES.find(t => t.start &&
+      (label.includes(t.start) || label.includes(noZero(t.start))));
     if (guess) sel.value = guess.id;
     else if (/休|off|お休み/i.test(label)) sel.value = "off";
     else sel.value = "__skip";
